@@ -1049,6 +1049,12 @@
           ]
         },
         {
+          "key": "ui.sidebar.agents.enabled",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the agents section in the expanded sidebar. Set false to hide the agents header, rows, and empty state; the spaces section then fills the sidebar height, and the agents rail is hidden in the collapsed sidebar and mobile switcher."
+        },
+        {
           "key": "ui.sidebar.agents.row_gap",
           "type": "integer",
           "default": "0",

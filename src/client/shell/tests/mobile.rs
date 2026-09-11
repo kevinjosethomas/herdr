@@ -321,6 +321,61 @@ fn mobile_header_and_switcher_render_released_sections_and_stable_targets() {
 }
 
 #[test]
+fn disabled_agents_panel_hides_the_mobile_switcher_agents_section() {
+    let disabled: Config =
+        toml::from_str("[ui.sidebar.agents]\nenabled = false\n").expect("disabled agents config");
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&disabled));
+    let mut projected = snapshot();
+    projected.agents.push(ClientShellAgent {
+        pane_id: "pane_1".into(),
+        workspace_id: "ws_1".into(),
+        tab_id: "tab_1".into(),
+        name: Some("pi".into()),
+        display_agent: Some("pi".into()),
+        agent: Some("pi".into()),
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Blocked,
+        state_change_seq: 1,
+        state_labels: vec![("blocked".into(), "waiting".into())],
+        tokens: Vec::new(),
+        focused: true,
+    });
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+
+    state.compose(44, 20).expect("mobile header");
+    let click = |rect: Rect| {
+        RawInputEvent::Mouse(crossterm::event::MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.x,
+            row: rect.y,
+            modifiers: KeyModifiers::empty(),
+        })
+    };
+    state.handle_raw_events(vec![click(state.hits.mobile_switch)]);
+    let switcher = state.compose(44, 20).expect("mobile switcher");
+    let switcher_text = switcher
+        .cells
+        .chunks(switcher.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(switcher_text.contains("spaces"));
+    assert!(!switcher_text.contains("agents"));
+    assert!(state
+        .hits
+        .mobile_targets
+        .iter()
+        .all(|(_, target)| !matches!(target, ClientMobileTarget::Agent { .. })));
+}
+
+#[test]
 fn mobile_background_workspace_uses_its_own_active_tab_status() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     let mut projected = snapshot();

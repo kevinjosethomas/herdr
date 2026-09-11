@@ -219,4 +219,5 @@ mod keybindings_settings;
 mod mobile;
 mod mouse_selection;
 mod popup_focus_projection;
+mod sidebar_agents_toggle;
 mod startup_overlays;

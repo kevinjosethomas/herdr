@@ -259,6 +259,70 @@ fn sidebar_renders_local_and_saved_ssh_endpoints_with_status() {
 }
 
 #[test]
+fn disabled_agents_panel_hides_the_endpoint_sidebar_section() {
+    let (mut state, remote_id) = state_with_remote();
+    let mut remote = snapshot();
+    remote.boot_id = "remote-boot".into();
+    remote.workspaces[0].label = "remote-workspace".into();
+    remote.agents.push(agent(
+        "remote-pi",
+        crate::api::schema::AgentStatus::Blocked,
+        1,
+    ));
+    state.set_endpoint_snapshot(&remote_id, Box::new(remote));
+
+    let frame = state.compose(100, 28).expect("endpoint sidebar");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains(" machines"));
+    assert!(text.contains(" agents"));
+    assert!(!state.hits.sidebar_section_divider.is_empty());
+    assert!(!state.hits.endpoint_agents.is_empty());
+
+    state.config.agents.enabled = false;
+    let frame = state
+        .compose(100, 28)
+        .expect("endpoint sidebar without agents");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains(" machines"));
+    assert!(!text.contains(" agents"));
+    assert!(state.hits.sidebar_section_divider.is_empty());
+    assert!(state.hits.endpoint_agents.is_empty());
+    assert_eq!(
+        state.hits.workspace_body.bottom() + 1,
+        state.hits.sidebar_divider.bottom(),
+        "machines section must fill the sidebar height when the agents panel is hidden"
+    );
+
+    state.sidebar_collapsed = true;
+    state.config.agents.enabled = true;
+    state.compose(100, 28).expect("collapsed endpoint rail");
+    assert!(!state.hits.endpoint_agents.is_empty());
+    state.config.agents.enabled = false;
+    state
+        .compose(100, 28)
+        .expect("collapsed endpoint rail without agents");
+    assert!(state.hits.endpoint_agents.is_empty());
+}
+
+#[test]
 fn saved_machine_preserves_endpoint_scoped_worktree_collapses() {
     fn add_worktree_group(snapshot: &mut ClientShellSnapshot, parent_id: &str, child_id: &str) {
         snapshot.workspaces[0].workspace_id = parent_id.into();

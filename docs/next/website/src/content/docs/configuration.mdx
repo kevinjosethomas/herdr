@@ -368,6 +368,15 @@ rows = [
 ]
 ```
 
+Set `enabled = false` under `[ui.sidebar.agents]` to hide the agents section entirely:
+
+```toml
+[ui.sidebar.agents]
+enabled = false
+```
+
+The spaces section then fills the expanded sidebar height, with no agents header, rows, empty state, or section divider. The agents rail is hidden in the collapsed sidebar and the mobile switcher as well.
+
 Agent rows accept these built-in tokens:
 
 - `state_icon` — colored icon for the agent's semantic state.
