@@ -878,7 +878,7 @@ fn navigator_has_one_row_per_space_with_many_tabs_and_panes() {
     navigator.query.clear();
     navigator.selected = None;
     navigator.expanded_workspaces.clear();
-    assert!(state.handle_input_bytes(b"j").actions.is_empty());
+    assert!(state.handle_input_bytes(b"\x1b[B").actions.is_empty());
     let outcome = state.handle_input_bytes(b"\r");
     let [ClientShellAction::Endpoint { request, .. }] = &outcome.actions[..] else {
         panic!("space selection should use endpoint API");
@@ -886,6 +886,113 @@ fn navigator_has_one_row_per_space_with_many_tabs_and_panes() {
     assert!(
         matches!(&request.method, crate::api::schema::Method::WorkspaceFocus(target) if target.workspace_id == "ws_2")
     );
+}
+
+#[test]
+fn navigator_opens_in_search_and_types_letters_instead_of_commands() {
+    let mut initial = snapshot();
+    initial.workspaces[0].label = "jkbwida/project".into();
+    let mut other = initial.workspaces[0].clone();
+    other.workspace_id = "ws_2".into();
+    other.label = "other".into();
+    other.focused = false;
+    initial.workspaces.push(other);
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(initial));
+    state.set_pane_surface(surface());
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::OpenNavigator),
+        &mut ClientShellInput::default(),
+    );
+    assert!(matches!(state.overlay, Some(ClientShellOverlay::Navigator(
+        ClientNavigatorOverlay { search_focused: true, ref query, .. }
+    )) if query.is_empty()));
+    assert!(state.compose(106, 30).expect("navigator").cursor.is_some());
+    for letter in b"jkbwida/" {
+        assert!(state.handle_input_bytes(&[*letter]).actions.is_empty());
+    }
+    let Some(ClientShellOverlay::Navigator(navigator)) = state.overlay.as_ref() else {
+        panic!("expected navigator");
+    };
+    assert_eq!(navigator.query, "jkbwida/");
+    assert!(navigator.filter.is_none());
+    let rows =
+        render::client_navigator_rows(&state.endpoints, &state.active_endpoint_id, navigator);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].label, "jkbwida/project");
+    state.handle_input_bytes(b"\x7f");
+    assert!(matches!(state.overlay, Some(ClientShellOverlay::Navigator(
+        ClientNavigatorOverlay { ref query, .. }
+    )) if query == "jkbwida"));
+    state.handle_input_bytes(b"\x15");
+    state.handle_input_bytes(b"\x1b[B");
+    state.handle_input_bytes(b"\x1b[A");
+    let Some(ClientShellOverlay::Navigator(navigator)) = state.overlay.as_ref() else {
+        panic!("expected navigator");
+    };
+    assert!(navigator.query.is_empty());
+    assert!(
+        matches!(&navigator.selected, Some(ClientNavigatorTarget::Workspace {
+        workspace_id, ..
+    }) if workspace_id == "ws_1")
+    );
+    state.handle_input_bytes(b"\x1b[B");
+    let outcome = state.handle_input_bytes(b"\r");
+    assert!(
+        matches!(&outcome.actions[..], [ClientShellAction::Endpoint { request, .. }]
+        if matches!(&request.method, crate::api::schema::Method::WorkspaceFocus(target)
+            if target.workspace_id == "ws_2"))
+    );
+    assert!(state.overlay.is_none());
+}
+
+#[test]
+fn navigator_escape_closes_empty_and_filtered_search_without_focus_actions() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    for query in ["", "no matching space"] {
+        state.open_navigator_overlay();
+        state.handle_input_bytes(query.as_bytes());
+        let outcome = state.handle_input_bytes(b"\x1b");
+        assert!(outcome.actions.is_empty());
+        assert!(outcome.requests.is_empty());
+        assert!(outcome.repaint);
+        assert!(state.overlay.is_none());
+    }
+    state.open_navigator_overlay();
+    assert!(matches!(state.overlay, Some(ClientShellOverlay::Navigator(
+        ClientNavigatorOverlay { search_focused: true, ref query, .. }
+    )) if query.is_empty()));
+}
+
+#[test]
+#[ignore = "manual navigator composition scaling profile"]
+fn navigator_render_scale_profile() {
+    for panes in [1, 15, 52] {
+        let mut snapshot = snapshot();
+        for index in 1..panes {
+            let mut pane = snapshot.panes[0].clone();
+            pane.pane_id = format!("pane_{index}_extra");
+            pane.focused = false;
+            snapshot.panes.push(pane);
+        }
+        let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+        state.set_snapshot(Box::new(snapshot));
+        state.set_pane_surface(surface());
+        state.open_navigator_overlay();
+        for _ in 0..20 {
+            std::hint::black_box(state.compose(106, 30).expect("navigator frame"));
+        }
+        let start = std::time::Instant::now();
+        for _ in 0..1000 {
+            std::hint::black_box(state.compose(106, 30).expect("navigator frame"));
+        }
+        eprintln!(
+            "navigator: {panes} panes, {:.1} us/frame",
+            start.elapsed().as_secs_f64() * 1000.0
+        );
+    }
 }
 
 #[test]
@@ -936,8 +1043,7 @@ fn navigator_owns_search_mouse_selection_and_stable_target_focus() {
         .as_ref()
         .is_some_and(|cursor| cursor.visible));
 
-    state.handle_input_bytes(b"\x1b");
-    state.handle_input_bytes(b"a");
+    state.handle_input_bytes(b"\x15");
     state.compose(106, 30).expect("navigator rows");
     let workspace_target = {
         let ClientShellOverlay::Navigator(navigator) = state.overlay.as_ref().expect("navigator")

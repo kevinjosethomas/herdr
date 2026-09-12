@@ -201,7 +201,7 @@ impl ClientShellState {
                 .collect();
         let mut navigator = ClientNavigatorOverlay {
             query: String::new(),
-            search_focused: false,
+            search_focused: true,
             selected: None,
             scroll: 0,
             filter: None,
@@ -609,13 +609,7 @@ impl ClientShellState {
                 }))
             );
             if code == KeyCode::Esc {
-                if search_focused {
-                    if let Some(ClientShellOverlay::Navigator(navigator)) = self.overlay.as_mut() {
-                        navigator.search_focused = false;
-                    }
-                } else {
-                    self.overlay = None;
-                }
+                self.overlay = None;
                 outcome.repaint = true;
                 return;
             }
