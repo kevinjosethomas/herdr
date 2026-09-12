@@ -78,10 +78,12 @@ fn push_host_theme_update(
 
 impl ClientShellState {
     pub(crate) fn host_keyboard_report_all_requested(&self) -> bool {
-        matches!(
-            self.mode,
-            ClientShellMode::Prefix | ClientShellMode::Navigate
-        )
+        // Modifier-only Kitty events require REPORT_ALL before Command is pressed.
+        self.command_spaces.enabled
+            || matches!(
+                self.mode,
+                ClientShellMode::Prefix | ClientShellMode::Navigate
+            )
     }
 
     #[cfg(any(unix, test))]
@@ -247,6 +249,7 @@ impl ClientShellState {
                 }
                 RawInputEvent::OuterFocusLost => {
                     self.outer_focused = Some(false);
+                    self.clear_command_spaces(&mut outcome);
                     self.release_input_leases(&mut outcome);
                     outcome
                         .requests
@@ -300,6 +303,9 @@ impl ClientShellState {
         key: crate::input::TerminalKey,
         outcome: &mut ClientShellInput,
     ) {
+        if self.handle_command_space_key(&key, outcome) {
+            return;
+        }
         if self.copy_operation_in_flight {
             self.copy_input_queue.push_back(key);
             return;

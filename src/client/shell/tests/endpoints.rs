@@ -1426,3 +1426,21 @@ fn collapsed_aggregate_workspace_status_uses_its_status_color() {
         state.config.palette.red
     );
 }
+
+#[test]
+fn command_space_shortcuts_only_badge_and_focus_the_active_endpoint() {
+    let (mut state, remote) = state_with_remote();
+    state.command_spaces.enabled = true;
+    state.handle_input_bytes(b"\x1b[57444;9u");
+    let frame = state.compose(100, 28).unwrap().to_ratatui_buffer().unwrap();
+    for hit in &state.hits.workspaces {
+        let text: String = (hit.rect.right() - 2..hit.rect.right())
+            .map(|x| frame[(x, hit.rect.y)].symbol())
+            .collect();
+        assert_eq!(text == "⌘1", hit.endpoint_id == ClientEndpointId::Local);
+    }
+    // Changing active machine during the hold cannot silently retarget its digit.
+    state.active_endpoint_id = remote;
+    let outcome = state.handle_input_bytes(b"\x1b[49;9u");
+    assert!(outcome.requests.is_empty() && outcome.actions.is_empty());
+}

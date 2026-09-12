@@ -107,6 +107,7 @@ pub(crate) struct PlatformCapabilities {
     pub(crate) live_handoff: bool,
     pub(crate) direct_terminal_attach: bool,
     pub(crate) preserve_legacy_doubled_escape_input: bool,
+    pub(crate) command_space_shortcuts: bool,
 }
 
 pub(crate) const fn capabilities() -> PlatformCapabilities {
@@ -114,6 +115,7 @@ pub(crate) const fn capabilities() -> PlatformCapabilities {
         live_handoff: cfg!(unix),
         direct_terminal_attach: cfg!(unix),
         preserve_legacy_doubled_escape_input: cfg!(target_os = "macos"),
+        command_space_shortcuts: cfg!(target_os = "macos"),
     }
 }
 
