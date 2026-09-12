@@ -1246,6 +1246,7 @@ impl ClientShellState {
     }
 
     pub(super) fn reset_endpoint_projection(&mut self) {
+        self.reset_agent_dwell();
         self.hits = ShellHitMap::default();
         self.pane_surface = None;
         self.pending_pane_surface = None;
@@ -1839,6 +1840,7 @@ impl ClientShellState {
     }
 
     pub(crate) fn invalidate_pane_surface(&mut self) {
+        self.reset_agent_dwell();
         self.pane_surface = None;
         self.pending_pane_surface = None;
         self.hits = ShellHitMap::default();

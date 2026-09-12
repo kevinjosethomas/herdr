@@ -660,6 +660,7 @@ fn aggregate_priority_uses_client_observed_recency_across_machines() {
             < text.find("Build · remote agent").expect("remote agent")
     );
 
+    assert!(state.acknowledge_current_space());
     remote.agents = vec![agent("remote agent", AgentStatus::Working, 2)];
     state.set_endpoint_snapshot(&endpoint_id, Box::new(remote.clone()));
     let text = frame_text(&mut state);
@@ -1443,4 +1444,39 @@ fn command_space_shortcuts_only_badge_and_focus_the_active_endpoint() {
     state.active_endpoint_id = remote;
     let outcome = state.handle_input_bytes(b"\x1b[49;9u");
     assert!(outcome.requests.is_empty() && outcome.actions.is_empty());
+}
+
+#[test]
+fn completion_dwell_survives_coherent_metadata_revision_updates() {
+    use std::time::{Duration, Instant};
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let mut initial = snapshot();
+    initial.agents = vec![agent("local agent", AgentStatus::Working, 1)];
+    state.set_snapshot(Box::new(initial.clone()));
+    initial.revision = 2;
+    initial.agents[0].agent_status = AgentStatus::Idle;
+    initial.agents[0].state_change_seq = 2;
+    state.set_snapshot(Box::new(initial.clone()));
+    let mut shown = surface();
+    shown.projection_revision = 2;
+    state.set_pane_surface(shown.clone());
+    state.reset_agent_dwell();
+    let start = Instant::now() - Duration::from_secs(4);
+    assert!(!state.tick_agent_dwell(start));
+    for revision in 3..8 {
+        initial.revision = revision;
+        shown.projection_revision = revision;
+        if revision % 2 == 0 {
+            state.set_pane_surface(shown.clone());
+            state.set_snapshot(Box::new(initial.clone()));
+        } else {
+            state.set_snapshot(Box::new(initial.clone()));
+            state.set_pane_surface(shown.clone());
+        }
+    }
+    assert!(state.tick_agent_dwell(start + Duration::from_secs(5)));
+    assert_eq!(
+        state.snapshot.as_ref().unwrap().agents[0].agent_status,
+        AgentStatus::Idle
+    );
 }

@@ -635,3 +635,47 @@ fn styled_client_composition_preserves_pane_hyperlinks() {
     let link = frame.cells[index].hyperlink.expect("linked cell") as usize;
     assert_eq!(frame.hyperlinks[link], "https://example.test");
 }
+
+#[test]
+fn ctrl_shift_u_acknowledges_completion_without_forwarding_to_pane() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let mut initial = snapshot();
+    initial.agents = vec![ClientShellAgent {
+        pane_id: "pane_1".into(),
+        workspace_id: "ws_1".into(),
+        tab_id: "tab_1".into(),
+        name: None,
+        display_agent: None,
+        agent: None,
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Working,
+        state_change_seq: 1,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused: true,
+    }];
+    state.set_snapshot(Box::new(initial.clone()));
+    initial.revision = 2;
+    initial.agents[0].agent_status = AgentStatus::Idle;
+    initial.agents[0].state_change_seq = 2;
+    state.set_snapshot(Box::new(initial));
+    let mut shown = surface();
+    shown.projection_revision = 2;
+    state.set_pane_surface(shown);
+    assert_eq!(
+        state.snapshot.as_ref().unwrap().agents[0].agent_status,
+        AgentStatus::Done
+    );
+    let outcome = state.handle_input_bytes(b"\x1b[117;6u");
+    assert!(outcome.requests.is_empty());
+    assert!(outcome.actions.is_empty());
+    assert!(outcome.repaint);
+    assert_eq!(
+        state.snapshot.as_ref().unwrap().agents[0].agent_status,
+        AgentStatus::Idle
+    );
+    let release = state.handle_input_bytes(b"\x1b[117;6:3u");
+    assert!(release.requests.is_empty());
+}

@@ -121,6 +121,13 @@ impl ClientShellState {
     }
 
     pub(crate) fn mark_endpoint_disconnected(&mut self, endpoint_id: &ClientEndpointId) {
+        if let Some(endpoint) = self
+            .endpoints
+            .iter_mut()
+            .find(|endpoint| &endpoint.endpoint_id == endpoint_id)
+        {
+            endpoint.agent_presentation.reset_dwell();
+        }
         self.set_endpoint_status(endpoint_id, ClientEndpointStatus::Reconnecting);
         if endpoint_id == &self.active_endpoint_id {
             let pending = self.pending_requests.keys().cloned().collect::<Vec<_>>();
@@ -171,6 +178,7 @@ impl ClientShellState {
             return false;
         };
         if endpoint_id != &self.active_endpoint_id {
+            self.reset_agent_dwell();
             self.active_endpoint_id = endpoint_id.clone();
             self.pane_surface = None;
             self.pending_pane_surface = None;
@@ -365,6 +373,9 @@ impl ClientShellState {
         {
             return;
         }
+        if self.endpoints[index].snapshot_generation != generation {
+            self.endpoints[index].agent_presentation.reset_dwell();
+        }
         let boot_changed = self.endpoints[index]
             .snapshot
             .as_deref()
@@ -375,15 +386,28 @@ impl ClientShellState {
         self.endpoints[index]
             .agent_presentation
             .project_snapshot(&mut snapshot);
-        let presented_surface = if acknowledge_surface && endpoint_id == &self.active_endpoint_id {
+        let presented_surface = if acknowledge_surface
+            && endpoint_id == &self.active_endpoint_id
+            && !self.agent_dwell_focus_pending()
+        {
             self.pane_surface.as_ref()
         } else {
             None
         };
-        if let Some(surface) = presented_surface {
-            self.endpoints[index]
-                .agent_presentation
-                .acknowledge_surface(&mut snapshot, surface, self.outer_focused);
+        // Snapshot and surface arrive separately. Do not break continuous dwell during
+        // atomic pair promotion; the next surface/timer tick validates coherence.
+        if let Some(surface) = presented_surface.filter(|surface| {
+            surface.boot_id == snapshot.boot_id && surface.projection_revision == snapshot.revision
+        }) {
+            self.endpoints[index].agent_presentation.observe_surface(
+                &mut snapshot,
+                surface,
+                self.outer_focused,
+                std::time::Instant::now(),
+            );
+        }
+        if presented_surface.is_none() {
+            self.endpoints[index].agent_presentation.reset_dwell();
         }
         let previous = self.endpoints[index].snapshot.as_deref();
         let mut next_recency = self
@@ -422,7 +446,87 @@ impl ClientShellState {
         endpoint.snapshot = Some(snapshot);
     }
 
+    fn agent_dwell_focus_pending(&self) -> bool {
+        self.pending_requests.values().any(|request| {
+            matches!(
+                request.method_name.as_str(),
+                "workspace.focus" | "tab.focus" | "pane.focus" | "agent.focus"
+            )
+        })
+    }
+
+    pub(super) fn reset_agent_dwell(&mut self) {
+        for endpoint in &mut self.endpoints {
+            endpoint.agent_presentation.reset_dwell();
+        }
+    }
+
+    pub(crate) fn tick_agent_dwell(&mut self, now: std::time::Instant) -> bool {
+        if self.outer_focused == Some(false)
+            || self.agent_dwell_focus_pending()
+            || !self.endpoint_projection_available(&self.active_endpoint_id)
+        {
+            self.reset_agent_dwell();
+            return false;
+        }
+        let Some(surface) = self.pane_surface.as_ref() else {
+            self.reset_agent_dwell();
+            return false;
+        };
+        let Some(endpoint) = self
+            .endpoints
+            .iter_mut()
+            .find(|endpoint| endpoint.endpoint_id == self.active_endpoint_id)
+        else {
+            return false;
+        };
+        let Some(snapshot) = endpoint.snapshot.as_deref_mut() else {
+            return false;
+        };
+        let changed =
+            endpoint
+                .agent_presentation
+                .observe_surface(snapshot, surface, self.outer_focused, now);
+        if changed {
+            self.snapshot = endpoint.snapshot.clone();
+        }
+        changed
+    }
+
+    pub(super) fn acknowledge_current_space(&mut self) -> bool {
+        if self.agent_dwell_focus_pending()
+            || !self.endpoint_projection_available(&self.active_endpoint_id)
+        {
+            return false;
+        }
+        let Some(surface) = self.pane_surface.as_ref() else {
+            return false;
+        };
+        let Some(endpoint) = self
+            .endpoints
+            .iter_mut()
+            .find(|endpoint| endpoint.endpoint_id == self.active_endpoint_id)
+        else {
+            return false;
+        };
+        let Some(snapshot) = endpoint.snapshot.as_deref_mut() else {
+            return false;
+        };
+        let changed =
+            endpoint
+                .agent_presentation
+                .acknowledge_surface(snapshot, surface, self.outer_focused);
+        if changed {
+            self.snapshot = endpoint.snapshot.clone();
+        }
+        changed
+    }
+
     pub(crate) fn acknowledge_active_surface_agents(&mut self, surface: &PaneSurfaceFrame) -> bool {
+        if self.agent_dwell_focus_pending() {
+            self.reset_agent_dwell();
+            return false;
+        }
         let Some(index) = self
             .endpoints
             .iter()
@@ -435,9 +539,12 @@ impl ClientShellState {
             let Some(snapshot) = endpoint.snapshot.as_deref_mut() else {
                 return false;
             };
-            endpoint
-                .agent_presentation
-                .acknowledge_surface(snapshot, surface, self.outer_focused)
+            endpoint.agent_presentation.observe_surface(
+                snapshot,
+                surface,
+                self.outer_focused,
+                std::time::Instant::now(),
+            )
         };
         if changed {
             self.snapshot = self.endpoints[index].snapshot.clone();

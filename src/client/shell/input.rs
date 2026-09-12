@@ -249,6 +249,7 @@ impl ClientShellState {
                 }
                 RawInputEvent::OuterFocusLost => {
                     self.outer_focused = Some(false);
+                    self.reset_agent_dwell();
                     self.clear_command_spaces(&mut outcome);
                     self.release_input_leases(&mut outcome);
                     outcome
@@ -527,6 +528,12 @@ impl ClientShellState {
         }
         if self.overlay.is_some() {
             self.route_overlay_key(key, outcome);
+            return None;
+        }
+        if matches!(key.code, KeyCode::Char('u' | 'U'))
+            && key.modifiers == (KeyModifiers::CONTROL | KeyModifiers::SHIFT)
+        {
+            outcome.repaint |= self.acknowledge_current_space();
             return None;
         }
         if matches!(key.code, KeyCode::Modifier(_)) {

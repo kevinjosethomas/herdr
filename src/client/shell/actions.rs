@@ -403,6 +403,15 @@ impl ClientShellState {
             outcome.repaint |= self.receive_endpoint_unavailable(format!("{label} is not ready"));
             return false;
         }
+        if matches!(
+            &method,
+            crate::api::schema::Method::WorkspaceFocus(_)
+                | crate::api::schema::Method::TabFocus(_)
+                | crate::api::schema::Method::PaneFocus(_)
+                | crate::api::schema::Method::AgentFocus(_)
+        ) {
+            self.reset_agent_dwell();
+        }
         let method_name = crate::api::api_method_name(&method).to_owned();
         if !self.supports_endpoint_method(&method) {
             outcome.repaint |= self.push_endpoint_notice(
