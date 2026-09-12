@@ -722,7 +722,7 @@ fn render_navigator_overlay(
             }
         )
     } else if n.query.is_empty() {
-        " / search panes".to_owned()
+        " / search spaces".to_owned()
     } else {
         format!(" / {}", n.query)
     };
@@ -740,12 +740,7 @@ fn render_navigator_overlay(
         b,
         i,
         i.y,
-        &format!(
-            "{} panes",
-            rows.iter()
-                .filter(|row| matches!(row.target, ClientNavigatorTarget::Pane { .. }))
-                .count()
-        ),
+        &format!("{} spaces", rows.len()),
         Style::default().fg(p.overlay0).bg(p.panel_bg),
     );
     put_text(
@@ -798,18 +793,7 @@ fn render_navigator_overlay(
         b.set_style(rect, st);
         let tree = match &r.target {
             ClientNavigatorTarget::Machine { .. } => "▾".to_owned(),
-            ClientNavigatorTarget::Workspace {
-                endpoint_id,
-                workspace_id,
-            } if n
-                .expanded_workspaces
-                .contains(&(endpoint_id.clone(), workspace_id.clone())) =>
-            {
-                if r.depth == 0 { "▾" } else { "  ▾" }.to_owned()
-            }
-            ClientNavigatorTarget::Workspace { .. } => {
-                if r.depth == 0 { "▸" } else { "  ▸" }.to_owned()
-            }
+            ClientNavigatorTarget::Workspace { .. } => String::new(),
             ClientNavigatorTarget::Tab { .. } | ClientNavigatorTarget::Pane { .. } => {
                 // Machines and workspaces keep their existing caret decoration.
                 // Connected branches begin below each workspace.
@@ -907,7 +891,7 @@ fn render_navigator_overlay(
         if n.search_focused {
             " search type · move ↑↓/ctrl+n/p · open enter · back esc"
         } else {
-            " move j/k · expand space · filter a/b/w/i/d · search / · open enter · close esc"
+            " move j/k · filter a/b/w/i/d · search / · open enter · close esc"
         },
         Style::default().fg(p.overlay0).bg(p.panel_bg),
     );

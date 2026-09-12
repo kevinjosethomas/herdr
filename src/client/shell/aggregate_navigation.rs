@@ -207,12 +207,18 @@ pub(super) fn navigator_rows(
                 if !filtering || workspace_matches || !children.is_empty() {
                     let key = (endpoint.endpoint_id.clone(), workspace.workspace_id.clone());
                     endpoint_rows.push(ClientNavigatorRow {
-                        depth: depth_offset,
+                        depth: 0,
                         label: workspace.label.clone(),
-                        meta: workspace_meta,
+                        meta: if federated {
+                            format!("{} · {}", endpoint.label, workspace_meta)
+                        } else {
+                            workspace_meta
+                        },
                         status: None,
                         stale,
-                        current: false,
+                        current: endpoint.endpoint_id == *active_endpoint_id
+                            && snapshot.focused_workspace_id.as_deref()
+                                == Some(&workspace.workspace_id),
                         target: ClientNavigatorTarget::Workspace {
                             endpoint_id: endpoint.endpoint_id.clone(),
                             workspace_id: workspace.workspace_id.clone(),
@@ -241,6 +247,9 @@ pub(super) fn navigator_rows(
             rows.extend(endpoint_rows);
         }
     }
+    // Keep descendant matching for search and status filters, but expose only
+    // spaces as selectable targets. Workspace focus preserves its active pane.
+    rows.retain(|row| matches!(row.target, ClientNavigatorTarget::Workspace { .. }));
     rows
 }
 

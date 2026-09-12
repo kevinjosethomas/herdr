@@ -281,37 +281,6 @@ impl ClientShellState {
         outcome.repaint = true;
     }
 
-    pub(super) fn toggle_selected_navigator_workspace(&mut self) {
-        let workspace_key = self.overlay.as_ref().and_then(|overlay| match overlay {
-            ClientShellOverlay::Navigator(navigator) => {
-                let rows = render::client_navigator_rows(
-                    &self.endpoints,
-                    &self.active_endpoint_id,
-                    navigator,
-                );
-                super::aggregate_navigation::selected_navigator_target(&rows, navigator).and_then(
-                    |target| match target {
-                        ClientNavigatorTarget::Workspace {
-                            endpoint_id,
-                            workspace_id,
-                        } => Some((endpoint_id, workspace_id)),
-                        _ => None,
-                    },
-                )
-            }
-            _ => None,
-        });
-        if let (Some(workspace_key), Some(ClientShellOverlay::Navigator(navigator))) =
-            (workspace_key, self.overlay.as_mut())
-        {
-            if !navigator.expanded_workspaces.remove(&workspace_key) {
-                navigator.expanded_workspaces.insert(workspace_key);
-            }
-            navigator.selected = None;
-            navigator.scroll = 0;
-        }
-    }
-
     pub(super) fn workspace_action_id(&self) -> Option<String> {
         self.navigate_workspace_id
             .as_ref()
@@ -776,11 +745,6 @@ impl ClientShellState {
                     navigator.filter = None;
                     navigator.selected = None;
                 }
-                outcome.repaint = true;
-                return;
-            }
-            if code == KeyCode::Char(' ') && modifiers.is_empty() {
-                self.toggle_selected_navigator_workspace();
                 outcome.repaint = true;
                 return;
             }

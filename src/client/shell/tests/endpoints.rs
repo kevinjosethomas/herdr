@@ -1086,7 +1086,7 @@ fn local_direct_graphics_accept_server_ids_across_endpoint_switches_and_restarts
 }
 
 #[test]
-fn navigator_uses_machine_parents_only_for_federated_clients() {
+fn navigator_lists_only_spaces_across_endpoints() {
     let (mut state, _) = state_with_remote();
     state.open_navigator_overlay();
     let ClientShellOverlay::Navigator(navigator) = state.overlay.as_ref().expect("navigator")
@@ -1095,81 +1095,19 @@ fn navigator_uses_machine_parents_only_for_federated_clients() {
     };
     let rows =
         render::client_navigator_rows(&state.endpoints, &state.active_endpoint_id, navigator);
-    let machines = rows
-        .iter()
-        .filter(|row| matches!(row.target, ClientNavigatorTarget::Machine { .. }))
-        .collect::<Vec<_>>();
-    assert_eq!(
-        machines
-            .iter()
-            .map(|row| row.label.as_str())
-            .collect::<Vec<_>>(),
-        vec!["Local", "Build"]
-    );
-    assert!(rows.iter().all(|row| {
-        matches!(row.target, ClientNavigatorTarget::Machine { .. })
-            || (!row.label.contains("Local ·") && !row.label.contains("Build ·"))
-    }));
-    assert!(rows.iter().all(|row| match row.target {
-        ClientNavigatorTarget::Machine { .. } => row.depth == 0 && row.status.is_none(),
-        ClientNavigatorTarget::Workspace { .. } => row.depth == 1 && row.status.is_none(),
-        ClientNavigatorTarget::Tab { .. } => row.depth == 2 && row.status.is_none(),
-        ClientNavigatorTarget::Pane { .. } => row.depth == 3 && row.status.is_some(),
-    }));
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(
+        |row| matches!(row.target, ClientNavigatorTarget::Workspace { .. }) && row.depth == 0
+    ));
     assert_eq!(rows.iter().filter(|row| row.current).count(), 1);
-
-    let frame = state.compose(106, 30).expect("federated navigator");
-    for (rect, target) in &state.hits.navigator_rows {
-        let expected = match target {
-            ClientNavigatorTarget::Machine { .. } => " ▾ ",
-            ClientNavigatorTarget::Workspace { .. } => "   ▾ ",
-            ClientNavigatorTarget::Tab { .. } => "     └── ",
-            ClientNavigatorTarget::Pane { .. } => "        └── ",
-        };
-        let prefix = frame.cells[rect.y as usize * frame.width as usize + rect.x as usize..]
-            .iter()
-            .take(expected.chars().count())
-            .map(|cell| cell.symbol.as_str())
-            .collect::<String>();
-        assert_eq!(prefix, expected, "{target:?}");
-    }
-
-    let mut local = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
-    local.set_snapshot(Box::new(snapshot()));
-    local.set_pane_surface(surface());
-    let frame = local.compose(100, 28).expect("local-only sidebar");
-    assert!(local.hits.machines.is_empty());
-    assert!(!frame
-        .cells
-        .chunks(frame.width as usize)
-        .map(|row| {
-            row.iter()
-                .map(|cell| cell.symbol.as_str())
-                .collect::<String>()
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        .contains(" machines"));
-    local.open_navigator_overlay();
-    let ClientShellOverlay::Navigator(navigator) = local.overlay.as_ref().expect("navigator")
-    else {
-        panic!("expected navigator");
-    };
-    let rows =
-        render::client_navigator_rows(&local.endpoints, &local.active_endpoint_id, navigator);
-    assert!(rows
-        .iter()
-        .all(|row| !matches!(row.target, ClientNavigatorTarget::Machine { .. })));
-    assert!(rows.iter().all(|row| match row.target {
-        ClientNavigatorTarget::Workspace { .. } => row.depth == 0,
-        ClientNavigatorTarget::Tab { .. } => row.depth == 1,
-        ClientNavigatorTarget::Pane { .. } => row.depth == 2,
-        ClientNavigatorTarget::Machine { .. } => false,
-    }));
+    assert!(rows[0].meta.contains("Local"));
+    assert!(rows[1].meta.contains("Build"));
+    state.compose(106, 30).expect("navigator frame");
+    assert_eq!(state.hits.navigator_rows.len(), 2);
 }
 
 #[test]
-fn navigator_keeps_saved_machine_visible_before_metadata_arrives() {
+fn navigator_omits_endpoints_without_spaces() {
     let (mut state, endpoint_id) = state_with_remote();
     let endpoint = state
         .endpoints
@@ -1187,69 +1125,15 @@ fn navigator_keeps_saved_machine_visible_before_metadata_arrives() {
     let rows =
         render::client_navigator_rows(&state.endpoints, &state.active_endpoint_id, navigator);
 
-    assert!(rows.iter().any(|row| {
-        matches!(
-            &row.target,
-            ClientNavigatorTarget::Machine { endpoint_id: target } if target == &endpoint_id
-        ) && row.label == "Build"
-            && row.stale
-    }));
-    assert!(!rows.iter().any(|row| match &row.target {
-        ClientNavigatorTarget::Machine { .. } => false,
-        ClientNavigatorTarget::Workspace {
-            endpoint_id: target,
-            ..
-        }
-        | ClientNavigatorTarget::Tab {
-            endpoint_id: target,
-            ..
-        }
-        | ClientNavigatorTarget::Pane {
-            endpoint_id: target,
-            ..
-        } => target == &endpoint_id,
-    }));
+    assert_eq!(rows.len(), 1);
+    assert!(rows.iter().all(|row| matches!(
+        &row.target,
+        ClientNavigatorTarget::Workspace { endpoint_id: target, .. } if target != &endpoint_id
+    )));
 }
 
 #[test]
-fn navigator_machine_selection_opens_its_remembered_view() {
-    let (mut state, endpoint_id) = state_with_remote();
-    state.open_navigator_overlay();
-    let selected = {
-        let ClientShellOverlay::Navigator(navigator) = state.overlay.as_ref().expect("navigator")
-        else {
-            panic!("expected navigator");
-        };
-        render::client_navigator_rows(&state.endpoints, &state.active_endpoint_id, navigator)
-            .into_iter()
-            .find(|row| {
-                matches!(
-                    &row.target,
-                    ClientNavigatorTarget::Machine { endpoint_id: target } if target == &endpoint_id
-                )
-            })
-            .map(|row| row.target)
-            .expect("remote machine row")
-    };
-    if let Some(ClientShellOverlay::Navigator(navigator)) = state.overlay.as_mut() {
-        navigator.selected = Some(selected);
-    }
-
-    let mut outcome = ClientShellInput::default();
-    state.accept_navigator_selection(&mut outcome);
-
-    assert!(matches!(
-        outcome.actions.as_slice(),
-        [ClientShellAction::ActivateEndpoint {
-            endpoint_id: activated,
-            target: None,
-        }] if activated == &endpoint_id
-    ));
-    assert!(state.overlay.is_none());
-}
-
-#[test]
-fn navigator_foreign_pane_selection_activates_its_endpoint() {
+fn navigator_foreign_space_selection_activates_its_endpoint() {
     let (mut state, endpoint_id) = state_with_remote();
     state.open_navigator_overlay();
     let selected = {
@@ -1262,14 +1146,14 @@ fn navigator_foreign_pane_selection_activates_its_endpoint() {
             .find(|row| {
                 matches!(
                     &row.target,
-                    ClientNavigatorTarget::Pane {
+                    ClientNavigatorTarget::Workspace {
                         endpoint_id: target_endpoint,
-                        pane_id,
-                    } if target_endpoint == &endpoint_id && pane_id == "pane_1"
+                        workspace_id,
+                    } if target_endpoint == &endpoint_id && workspace_id == "ws_1"
                 )
             })
             .map(|row| row.target.clone())
-            .expect("remote pane row")
+            .expect("remote space row")
     };
     if let Some(ClientShellOverlay::Navigator(navigator)) = state.overlay.as_mut() {
         navigator.selected = Some(selected);
@@ -1288,8 +1172,8 @@ fn navigator_foreign_pane_selection_activates_its_endpoint() {
         outcome.actions.as_slice(),
         [ClientShellAction::ActivateEndpoint {
             endpoint_id: activated,
-            target: Some(ClientEndpointFocusTarget::Pane(pane_id)),
-        }] if activated == &endpoint_id && pane_id == "pane_1"
+            target: Some(ClientEndpointFocusTarget::Workspace(workspace_id)),
+        }] if activated == &endpoint_id && workspace_id == "ws_1"
     ));
     assert!(state.overlay.is_none());
 }
@@ -1393,28 +1277,18 @@ fn cached_offline_navigator_and_mobile_targets_are_dimmed_and_disabled() {
         };
         let rows =
             render::client_navigator_rows(&state.endpoints, &state.active_endpoint_id, navigator);
-        let machine = rows
-            .iter()
-            .find(|row| {
-                matches!(
-                    &row.target,
-                    ClientNavigatorTarget::Machine { endpoint_id: target } if target == &endpoint_id
-                )
-            })
-            .expect("cached remote machine row");
-        assert!(machine.stale);
         let row = rows
             .iter()
             .find(|row| {
                 matches!(
                     &row.target,
-                    ClientNavigatorTarget::Pane {
+                    ClientNavigatorTarget::Workspace {
                         endpoint_id: target_endpoint,
-                        pane_id,
-                    } if target_endpoint == &endpoint_id && pane_id == "pane_1"
+                        workspace_id,
+                    } if target_endpoint == &endpoint_id && workspace_id == "ws_1"
                 )
             })
-            .expect("cached remote pane row");
+            .expect("cached remote space row");
         assert!(row.stale);
         assert!(!row.meta.contains("reconnecting"));
         row.target.clone()
@@ -1551,44 +1425,4 @@ fn collapsed_aggregate_workspace_status_uses_its_status_color() {
         buffer[(workspace.x.saturating_add(2), workspace.y)].fg,
         state.config.palette.red
     );
-}
-
-#[test]
-fn navigator_foreign_tab_selection_keeps_the_tab_target() {
-    let (mut state, endpoint_id) = state_with_remote();
-    state.open_navigator_overlay();
-    let selected = {
-        let ClientShellOverlay::Navigator(navigator) = state.overlay.as_ref().expect("navigator")
-        else {
-            panic!("expected navigator");
-        };
-        render::client_navigator_rows(&state.endpoints, &state.active_endpoint_id, navigator)
-            .iter()
-            .find(|row| {
-                matches!(
-                    &row.target,
-                    ClientNavigatorTarget::Tab {
-                        endpoint_id: target_endpoint,
-                        tab_id,
-                        ..
-                    } if target_endpoint == &endpoint_id && tab_id == "tab_1"
-                )
-            })
-            .map(|row| row.target.clone())
-            .expect("remote tab row")
-    };
-    if let Some(ClientShellOverlay::Navigator(navigator)) = state.overlay.as_mut() {
-        navigator.selected = Some(selected);
-    }
-
-    let mut outcome = ClientShellInput::default();
-    state.accept_navigator_selection(&mut outcome);
-
-    assert!(matches!(
-        outcome.actions.as_slice(),
-        [ClientShellAction::ActivateEndpoint {
-            endpoint_id: activated,
-            target: Some(ClientEndpointFocusTarget::Tab(tab_id)),
-        }] if activated == &endpoint_id && tab_id == "tab_1"
-    ));
 }

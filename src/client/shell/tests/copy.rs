@@ -810,7 +810,7 @@ fn copy_search_owns_prompt_repeat_highlights_selection_and_restore() {
 }
 
 #[test]
-fn navigator_renders_connected_siblings_and_ancestor_lines() {
+fn navigator_has_one_row_per_space_with_many_tabs_and_panes() {
     let mut snapshot = snapshot();
     snapshot.focused_pane_id = None;
     snapshot.tabs[0].label = "editor".into();
@@ -856,94 +856,36 @@ fn navigator_renders_connected_siblings_and_ancestor_lines() {
     state.set_snapshot(Box::new(snapshot));
     state.set_pane_surface(surface());
     state.open_navigator_overlay();
-    let prefixes = |state: &mut ClientShellState, height| {
-        let frame = state.compose(106, height).expect("navigator frame");
-        state
-            .hits
-            .navigator_rows
-            .iter()
-            .map(|(rect, _)| {
-                frame.cells[rect.y as usize * frame.width as usize + rect.x as usize + 1..]
-                    .iter()
-                    .take(6)
-                    .map(|cell| cell.symbol.as_str())
-                    .collect::<String>()
-            })
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(
-        prefixes(&mut state, 30),
-        [
-            "▾ clie",
-            "├── ed",
-            "│  ├──",
-            "│  └──",
-            "├── no",
-            "│  └──",
-            "└── lo",
-            "   └──",
-            "▾ seco",
-            "└── la",
-            "   └──"
-        ]
-    );
+    state.compose(106, 30).expect("navigator frame");
+    assert_eq!(state.hits.navigator_rows.len(), 2);
+    assert!(state
+        .hits
+        .navigator_rows
+        .iter()
+        .all(|(_, target)| matches!(target, ClientNavigatorTarget::Workspace { .. })));
 
-    // The editor ancestor is above this viewport; the logs sibling is below it.
-    let Some(ClientShellOverlay::Navigator(navigator)) = state.overlay.as_mut() else {
-        panic!("expected navigator");
-    };
-    navigator.scroll = 2;
-    navigator.selected = Some(ClientNavigatorTarget::Pane {
-        endpoint_id: state.active_endpoint_id.clone(),
-        pane_id: "pane_shell".into(),
-    });
-    assert_eq!(
-        prefixes(&mut state, 12),
-        ["│  ├──", "│  └──", "├── no", "│  └──"]
-    );
-
-    // Excluded siblings must not leave dangling continuation lines.
+    // Pane metadata remains searchable, without introducing a pane result.
     let Some(ClientShellOverlay::Navigator(navigator)) = state.overlay.as_mut() else {
         panic!("expected navigator");
     };
     navigator.query = "shell".into();
-    navigator.scroll = 0;
-    assert_eq!(prefixes(&mut state, 30), ["▾ clie", "└── ed", "   └──"]);
+    navigator.selected = None;
+    state.compose(106, 30).expect("filtered frame");
+    assert_eq!(state.hits.navigator_rows.len(), 1);
     let Some(ClientShellOverlay::Navigator(navigator)) = state.overlay.as_mut() else {
         panic!("expected navigator");
     };
     navigator.query.clear();
+    navigator.selected = None;
     navigator.expanded_workspaces.clear();
-    assert_eq!(prefixes(&mut state, 30), ["▸ clie", "▸ seco"]);
-}
-
-#[test]
-#[ignore = "manual navigator composition scaling profile"]
-fn navigator_render_scale_profile() {
-    for panes in [1, 15, 52] {
-        let mut snapshot = snapshot();
-        for index in 1..panes {
-            let mut pane = snapshot.panes[0].clone();
-            pane.pane_id = format!("pane_{index}_extra");
-            pane.focused = false;
-            snapshot.panes.push(pane);
-        }
-        let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
-        state.set_snapshot(Box::new(snapshot));
-        state.set_pane_surface(surface());
-        state.open_navigator_overlay();
-        for _ in 0..20 {
-            std::hint::black_box(state.compose(106, 30).expect("navigator frame"));
-        }
-        let start = std::time::Instant::now();
-        for _ in 0..1000 {
-            std::hint::black_box(state.compose(106, 30).expect("navigator frame"));
-        }
-        eprintln!(
-            "navigator: {panes} panes, {:.1} us/frame",
-            start.elapsed().as_secs_f64() * 1000.0
-        );
-    }
+    assert!(state.handle_input_bytes(b"j").actions.is_empty());
+    let outcome = state.handle_input_bytes(b"\r");
+    let [ClientShellAction::Endpoint { request, .. }] = &outcome.actions[..] else {
+        panic!("space selection should use endpoint API");
+    };
+    assert!(
+        matches!(&request.method, crate::api::schema::Method::WorkspaceFocus(target) if target.workspace_id == "ws_2")
+    );
 }
 
 #[test]
@@ -968,7 +910,8 @@ fn navigator_owns_search_mouse_selection_and_stable_target_focus() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(navigator_text.contains("client-shell"));
-    assert!(navigator_text.contains("pane 1"));
+    assert!(!navigator_text.contains("pane 1"));
+    assert!(navigator_text.contains("1 spaces"));
 
     let search = state.hits.navigator_search;
     let focus_search =
@@ -996,45 +939,45 @@ fn navigator_owns_search_mouse_selection_and_stable_target_focus() {
     state.handle_input_bytes(b"\x1b");
     state.handle_input_bytes(b"a");
     state.compose(106, 30).expect("navigator rows");
-    let pane_target = {
+    let workspace_target = {
         let ClientShellOverlay::Navigator(navigator) = state.overlay.as_ref().expect("navigator")
         else {
             panic!("expected navigator");
         };
         render::client_navigator_rows(&state.endpoints, &state.active_endpoint_id, navigator)
             .iter()
-            .find(|row| matches!(row.target, ClientNavigatorTarget::Pane { .. }))
+            .find(|row| matches!(row.target, ClientNavigatorTarget::Workspace { .. }))
             .map(|row| row.target.clone())
-            .expect("pane row")
+            .expect("space row")
     };
-    let pane_rect = state
+    let workspace_rect = state
         .hits
         .navigator_rows
         .iter()
-        .find(|(_, target)| *target == pane_target)
+        .find(|(_, target)| *target == workspace_target)
         .map(|(rect, _)| *rect)
-        .expect("visible pane row");
+        .expect("visible space row");
     let select =
         state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
             kind: MouseEventKind::Moved,
-            column: pane_rect.x + 6,
-            row: pane_rect.y,
+            column: workspace_rect.x,
+            row: workspace_rect.y,
             modifiers: KeyModifiers::empty(),
         })]);
     assert!(select.repaint);
     let accept =
         state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
-            column: pane_rect.x + 6,
-            row: pane_rect.y,
+            column: workspace_rect.x,
+            row: workspace_rect.y,
             modifiers: KeyModifiers::empty(),
         })]);
     let [ClientShellAction::Endpoint { request, .. }] = &accept.actions[..] else {
-        panic!("navigator pane click should use endpoint API");
+        panic!("navigator space click should use endpoint API");
     };
     assert!(matches!(
         &request.method,
-        crate::api::schema::Method::PaneFocus(target) if target.pane_id == "pane_1"
+        crate::api::schema::Method::WorkspaceFocus(target) if target.workspace_id == "ws_1"
     ));
     assert!(state.overlay.is_none());
 }
