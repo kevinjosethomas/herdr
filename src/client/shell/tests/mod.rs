@@ -221,4 +221,5 @@ mod mobile;
 mod mouse_selection;
 mod popup_focus_projection;
 mod sidebar_agents_toggle;
+mod space_rename;
 mod startup_overlays;

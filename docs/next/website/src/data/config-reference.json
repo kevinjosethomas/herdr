@@ -520,8 +520,8 @@
         {
           "key": "keys.rename_workspace",
           "type": "keybinding",
-          "default": "\"prefix+shift+w\"",
-          "description": "Rename the selected workspace."
+          "default": "[\"prefix+shift+w\", \"prefix+ctrl+r\"]",
+          "description": "Rename the selected workspace. Raw ctrl+r still reaches panes; the chord requires the prefix."
         },
         {
           "key": "keys.close_workspace",

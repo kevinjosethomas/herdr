@@ -1603,6 +1603,38 @@ next_tab = "prefix+n"
     }
 
     #[test]
+    fn rename_workspace_defaults_to_shift_w_and_ctrl_r_prefix_chords() {
+        let kb = Config::default().keybinds();
+        assert_eq!(
+            binding_triggers(&kb.rename_workspace),
+            vec![
+                BindingTrigger::Prefix((KeyCode::Char('w'), KeyModifiers::SHIFT)),
+                BindingTrigger::Prefix((KeyCode::Char('r'), KeyModifiers::CONTROL)),
+            ]
+        );
+    }
+
+    #[test]
+    fn user_rename_workspace_binding_replaces_default_chords() {
+        let config: Config = toml::from_str(
+            r#"
+[keys]
+rename_workspace = "prefix+f2"
+"#,
+        )
+        .unwrap();
+        let kb = config.keybinds();
+        assert_eq!(
+            binding_triggers(&kb.rename_workspace),
+            vec![BindingTrigger::Prefix((
+                KeyCode::F(2),
+                KeyModifiers::empty()
+            ))]
+        );
+        assert!(config.collect_diagnostics().is_empty());
+    }
+
+    #[test]
     fn open_and_remove_worktree_keybinds_are_unset_by_default() {
         let kb = Config::default().keybinds();
         assert!(kb.open_worktree.bindings.is_empty());
