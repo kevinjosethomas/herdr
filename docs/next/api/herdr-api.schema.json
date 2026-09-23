@@ -3058,6 +3058,12 @@
                 "null"
               ]
             },
+            "session_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "session_start_source": {
               "type": [
                 "string",

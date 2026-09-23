@@ -723,10 +723,18 @@ Session-only official integrations report native session references with `pane.r
     "pane_id": "w1:p1",
     "source": "herdr:codex",
     "agent": "codex",
-    "agent_session_id": "..."
+    "agent_session_id": "...",
+    "session_name": "Port the TUI"
   }
 }
 ```
+
+An optional `session_name` names the space after the reporting agent's session:
+the report from a workspace's primary pane (the first tab's root pane) becomes
+that space's label, ahead of the automatic directory label and behind a manual
+rename. An empty string clears the name back to the automatic label; omitting
+the field leaves the label untouched. Manual renames via `workspace rename`
+always win until the workspace is renamed again.
 
 `pane.get`, `pane.list`, `agent.get`, and `agent.list` expose a read-only `agent_session` object when Herdr has a stored native session reference:
 

@@ -1717,6 +1717,7 @@ impl AppState {
                 seq,
                 session_ref,
                 session_start_source,
+                session_name: _,
             } => self
                 .update_terminal_state(pane_id, |terminal| {
                     terminal.set_agent_session_ref_for_session_start(

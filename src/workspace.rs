@@ -178,6 +178,10 @@ pub struct Workspace {
     pub id: String,
     /// User-provided override. If set, auto-derived identity stops updating.
     pub custom_name: Option<String>,
+    /// Session-scoped label reported by the workspace's primary agent
+    /// (`pane.report_agent_session` with a session name). Wins over the
+    /// automatic directory label, loses to `custom_name`.
+    pub(crate) agent_session_label: Option<String>,
     /// Fallback workspace identity source for tests, old snapshots, or missing runtimes.
     pub identity_cwd: PathBuf,
     /// CWD from which the cached automatic label and Git metadata were derived.
@@ -252,6 +256,7 @@ impl Workspace {
         Self {
             id,
             custom_name: label,
+            agent_session_label: None,
             identity_cwd: identity_cwd.clone(),
             cached_identity_cwd: identity_cwd.clone(),
             cached_auto_label,
@@ -404,6 +409,7 @@ impl Workspace {
             Self {
                 id,
                 custom_name: None,
+                agent_session_label: None,
                 identity_cwd: initial_cwd.clone(),
                 cached_identity_cwd: initial_cwd.clone(),
                 cached_auto_label,
@@ -1039,6 +1045,9 @@ impl Workspace {
         if let Some(name) = &self.custom_name {
             return name.clone();
         }
+        if let Some(name) = &self.agent_session_label {
+            return name.clone();
+        }
 
         let cwd = self
             .tabs
@@ -1056,6 +1065,9 @@ impl Workspace {
         terminal_runtimes: &TerminalRuntimeRegistry,
     ) -> String {
         if let Some(name) = &self.custom_name {
+            return name.clone();
+        }
+        if let Some(name) = &self.agent_session_label {
             return name.clone();
         }
 
@@ -1197,6 +1209,7 @@ impl Workspace {
         Self {
             id: generate_workspace_id(),
             custom_name: Some(name.to_string()),
+            agent_session_label: None,
             identity_cwd: identity_cwd.clone(),
             cached_identity_cwd: identity_cwd.clone(),
             cached_auto_label: fallback_label_from_cwd(&identity_cwd),

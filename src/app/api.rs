@@ -16,6 +16,7 @@ mod worktrees;
 
 use super::{api_helpers::pane_agent_status, App, Mode, OverlayPaneState, ToastKind};
 use crate::events::AppEvent;
+use crate::layout::PaneId;
 
 const API_NOTIFICATION_RATE_LIMIT: Duration = Duration::from_secs(1);
 #[cfg(windows)]
@@ -48,6 +49,37 @@ impl App {
                 true
             }
         }
+    }
+
+    /// Apply an agent-reported session name to the owning workspace's label.
+    /// Only the primary pane (the first tab's root pane) names its space; a
+    /// reported-but-empty name clears the label back to the automatic one.
+    fn apply_agent_session_label(
+        &mut self,
+        pane_id: PaneId,
+        session_name: &Option<String>,
+    ) -> bool {
+        let Some(name) = session_name else {
+            return false;
+        };
+        let Some(ws_idx) = self
+            .state
+            .workspaces
+            .iter()
+            .position(|ws| ws.pane_state(pane_id).is_some())
+        else {
+            return false;
+        };
+        let workspace = &mut self.state.workspaces[ws_idx];
+        if workspace.tabs.first().map(|tab| tab.root_pane) != Some(pane_id) {
+            return false;
+        }
+        let label = (!name.is_empty()).then(|| name.clone());
+        if workspace.agent_session_label == label {
+            return false;
+        }
+        workspace.agent_session_label = label;
+        true
     }
 
     fn handle_git_status_refreshed(
@@ -105,6 +137,18 @@ impl App {
             AppEvent::TerminalBell { .. } | AppEvent::ClipboardWrite { .. }
         ) {
             return Vec::new();
+        }
+
+        if let AppEvent::AgentSessionReported {
+            pane_id,
+            session_name,
+            ..
+        } = &ev
+        {
+            if self.apply_agent_session_label(*pane_id, session_name) {
+                self.render_dirty.request_generic();
+                self.render_notify.notify_one();
+            }
         }
 
         if let AppEvent::GitStatusRefreshed {

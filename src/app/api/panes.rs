@@ -1568,6 +1568,11 @@ impl App {
         let Some(agent_label) = normalize_reported_agent_label(&params.agent) else {
             return invalid_agent(id);
         };
+        // `None` leaves the space label untouched; a reported value that
+        // normalizes to nothing clears it; any other text sets it.
+        let session_name = params
+            .session_name
+            .map(|name| normalize_presentation_text(Some(name)).unwrap_or_default());
         self.handle_internal_event(crate::events::AppEvent::AgentSessionReported {
             pane_id,
             session_ref: crate::agent_resume::session_ref_from_report(
@@ -1582,6 +1587,7 @@ impl App {
             session_start_source: crate::agent_resume::normalize_session_start_source(
                 params.session_start_source,
             ),
+            session_name,
         });
 
         encode_success(id, ResponseResult::Ok {})
@@ -2222,6 +2228,77 @@ mod tests {
         let pane_id = app.state.workspaces[0].tabs[0].root_pane;
         let public_pane_id = app.public_pane_id(0, pane_id).unwrap();
         (app, public_pane_id)
+    }
+
+    fn report_session(app: &mut App, public_pane_id: &str, session_name: Option<&str>) -> String {
+        app.handle_pane_report_agent_session(
+            "req".into(),
+            PaneReportAgentSessionParams {
+                pane_id: public_pane_id.into(),
+                source: "herdr:pi".into(),
+                agent: "pi".into(),
+                seq: None,
+                agent_session_id: Some("session-1".into()),
+                agent_session_path: None,
+                session_start_source: None,
+                session_name: session_name.map(str::to_string),
+            },
+        )
+    }
+
+    fn workspace_label(app: &App) -> String {
+        app.state.workspaces[0].display_name_from(&app.state.terminals, &app.terminal_runtimes)
+    }
+
+    #[test]
+    fn agent_session_report_names_the_primary_panes_space() {
+        let (mut app, public_pane_id) = app_with_test_workspace();
+        app.state.workspaces[0].custom_name = None;
+
+        let response = report_session(&mut app, &public_pane_id, Some("Rust Port"));
+        let response: SuccessResponse = serde_json::from_str(&response).unwrap();
+        assert!(matches!(response.result, ResponseResult::Ok {}));
+
+        assert_eq!(workspace_label(&app), "Rust Port");
+    }
+
+    #[test]
+    fn agent_session_report_ignores_split_panes() {
+        let (mut app, _public_root) = app_with_test_workspace();
+        app.state.workspaces[0].custom_name = None;
+        let split = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        let public_split = app.public_pane_id(0, split).unwrap();
+
+        let response = report_session(&mut app, &public_split, Some("split-session"));
+
+        let response: SuccessResponse = serde_json::from_str(&response).unwrap();
+        assert!(matches!(response.result, ResponseResult::Ok {}));
+        assert_ne!(workspace_label(&app), "split-session");
+    }
+
+    #[test]
+    fn agent_session_report_empty_name_clears_and_absent_name_keeps_label() {
+        let (mut app, public_pane_id) = app_with_test_workspace();
+        app.state.workspaces[0].custom_name = None;
+
+        report_session(&mut app, &public_pane_id, Some("named"));
+        assert_eq!(workspace_label(&app), "named");
+
+        report_session(&mut app, &public_pane_id, None);
+        assert_eq!(workspace_label(&app), "named", "absent name must not clear");
+
+        report_session(&mut app, &public_pane_id, Some("   "));
+        let cleared = workspace_label(&app);
+        assert_ne!(cleared, "named", "blank name must clear the label");
+    }
+
+    #[test]
+    fn agent_session_label_loses_to_custom_workspace_name() {
+        let (mut app, public_pane_id) = app_with_test_workspace();
+
+        report_session(&mut app, &public_pane_id, Some("agent-name"));
+
+        assert_eq!(workspace_label(&app), "metadata");
     }
 
     #[test]

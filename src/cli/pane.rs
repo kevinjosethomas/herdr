@@ -1286,7 +1286,7 @@ fn pane_report_agent(args: &[String]) -> std::io::Result<i32> {
 }
 
 fn pane_report_agent_session(args: &[String]) -> std::io::Result<i32> {
-    const USAGE: &str = "usage: herdr pane report-agent-session <pane_id> --source ID --agent LABEL [--seq N] [--agent-session-id ID] [--agent-session-path PATH] [--session-start-source SOURCE]";
+    const USAGE: &str = "usage: herdr pane report-agent-session <pane_id> --source ID --agent LABEL [--seq N] [--agent-session-id ID] [--agent-session-path PATH] [--session-start-source SOURCE] [--session-name TEXT]";
 
     let args = super::expand_equals_args(
         args,
@@ -1297,6 +1297,7 @@ fn pane_report_agent_session(args: &[String]) -> std::io::Result<i32> {
             "--agent-session-id",
             "--agent-session-path",
             "--session-start-source",
+            "--session-name",
         ],
     );
     let mut pane_id = None;
@@ -1306,6 +1307,7 @@ fn pane_report_agent_session(args: &[String]) -> std::io::Result<i32> {
     let mut agent_session_id = None;
     let mut agent_session_path = None;
     let mut session_start_source = None;
+    let mut session_name = None;
 
     let mut index = 0;
     while index < args.len() {
@@ -1358,6 +1360,14 @@ fn pane_report_agent_session(args: &[String]) -> std::io::Result<i32> {
                 session_start_source = Some(value.clone());
                 index += 2;
             }
+            "--session-name" => {
+                let Some(value) = args.get(index + 1) else {
+                    eprintln!("missing value for --session-name");
+                    return Ok(2);
+                };
+                session_name = Some(value.clone());
+                index += 2;
+            }
             option if option.starts_with('-') => {
                 eprintln!("unknown option: {option}");
                 return Ok(2);
@@ -1398,6 +1408,7 @@ fn pane_report_agent_session(args: &[String]) -> std::io::Result<i32> {
             agent_session_id,
             agent_session_path,
             session_start_source,
+            session_name,
         },
     ))
 }

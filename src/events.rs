@@ -96,6 +96,9 @@ pub enum AppEvent {
         seq: Option<u64>,
         session_ref: Option<crate::agent_resume::AgentSessionRef>,
         session_start_source: Option<String>,
+        /// Agent-reported session name for the space label: `None` leaves the
+        /// label untouched, `Some(String::new())` clears it, `Some(text)` sets it.
+        session_name: Option<String>,
     },
     /// Display-only agent metadata was reported for a pane.
     HookMetadataReported {
