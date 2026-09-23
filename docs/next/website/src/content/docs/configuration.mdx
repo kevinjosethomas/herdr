@@ -363,8 +363,7 @@ rows = [
 [ui.sidebar.spaces]
 row_gap = 0
 rows = [
-  ["state_icon", "workspace"],
-  ["branch", "git_status"],
+  ["index", "workspace"],
 ]
 ```
 
@@ -394,6 +393,7 @@ Space rows accept these built-in tokens:
 
 - `state_icon` — colored icon for the space's rolled-up agent state.
 - `state_text` — text for the rolled-up agent state.
+- `index` — 1-based position of the space in the sidebar, matching number-key switching.
 - `workspace` — workspace name.
 - `branch` — Git branch when available.
 - `git_status` — Git ahead and behind counts when nonzero.

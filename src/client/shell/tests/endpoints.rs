@@ -347,6 +347,10 @@ fn saved_machine_preserves_endpoint_scoped_worktree_collapses() {
     }
 
     let (mut state, remote_id) = state_with_remote();
+    state.config.spaces.rows = vec![vec![
+        crate::config::SpaceSidebarToken::StateIcon,
+        crate::config::SpaceSidebarToken::Workspace,
+    ]];
     let mut local = snapshot();
     add_worktree_group(&mut local, "ws_1", "ws_2");
     state.set_snapshot(Box::new(local));

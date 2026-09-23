@@ -91,7 +91,15 @@ fn collapsed_workspace_jitter_remains_a_click() {
 
 #[test]
 fn grouped_worktrees_render_parent_branch_and_indented_child() {
-    let config = ClientShellConfig::from_config(&Config::default());
+    let config = ClientShellConfig::from_config(
+        &toml::from_str::<Config>(
+            r#"
+[ui.sidebar.spaces]
+rows = [["state_icon", "workspace"], ["branch", "git_status"]]
+"#,
+        )
+        .expect("branch space rows config"),
+    );
     let mut state = ClientShellState::new(config);
     let mut snapshot = snapshot();
     snapshot.workspaces[0].worktree = Some(ClientShellWorktree {

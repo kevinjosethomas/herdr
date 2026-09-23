@@ -232,7 +232,8 @@ pub(crate) fn render_sidebar(
     hits.workspace_body = body;
     let row_heights = entries
         .iter()
-        .map(|entry| {
+        .enumerate()
+        .map(|(entry_position, entry)| {
             snapshot
                 .workspaces
                 .get(entry.index)
@@ -241,6 +242,7 @@ pub(crate) fn render_sidebar(
                         workspace,
                         displayed_workspace_status(snapshot, workspace, state.collapsed_groups),
                         entry.indented,
+                        entry_position + 1,
                         &config.spaces,
                     )
                     .len()
@@ -293,12 +295,21 @@ pub(crate) fn render_sidebar(
     let show_scrollbar = metrics.max_offset_from_bottom > 0 && body.width > 1;
     let content_width = body.width.saturating_sub(u16::from(show_scrollbar));
     let mut y = body.y;
-    for (entry_position, entry) in entries.iter().enumerate().skip(*state.workspace_scroll) {
+    for (entry_position, entry) in entries.iter().enumerate() {
+        if entry_position < *state.workspace_scroll {
+            continue;
+        }
         let Some(workspace) = snapshot.workspaces.get(entry.index) else {
             continue;
         };
         let status = displayed_workspace_status(snapshot, workspace, state.collapsed_groups);
-        let rows = workspace_rows(workspace, status, entry.indented, &config.spaces);
+        let rows = workspace_rows(
+            workspace,
+            status,
+            entry.indented,
+            entry_position + 1,
+            &config.spaces,
+        );
         let row_height = (rows.len().max(1).min(u16::MAX as usize) as u16).min(body.height);
         if y.saturating_add(row_height) > body.bottom() {
             break;
@@ -623,6 +634,7 @@ pub(in crate::client::shell) fn workspace_rows(
     workspace: &ClientShellWorkspace,
     status: crate::api::schema::AgentStatus,
     indented: bool,
+    position: usize,
     config: &SpacesSidebarConfig,
 ) -> Vec<Vec<crate::ui::ResolvedToken>> {
     let label = if indented && !workspace.custom_label {
@@ -638,6 +650,7 @@ pub(in crate::client::shell) fn workspace_rows(
     crate::ui::sidebar_space_rows(
         config,
         crate::ui::SpaceTokenContext {
+            index: position,
             workspace: label,
             branch: workspace.branch.as_deref(),
             state_text: status_text(status),

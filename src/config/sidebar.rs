@@ -127,6 +127,7 @@ pub enum AgentSidebarToken {
 pub enum SpaceSidebarToken {
     StateIcon,
     StateText,
+    Index,
     Workspace,
     Branch,
     GitStatus,
@@ -288,6 +289,7 @@ fn space_token_name(token: &SpaceSidebarToken) -> String {
     match token {
         SpaceSidebarToken::StateIcon => "state_icon".into(),
         SpaceSidebarToken::StateText => "state_text".into(),
+        SpaceSidebarToken::Index => "index".into(),
         SpaceSidebarToken::Workspace => "workspace".into(),
         SpaceSidebarToken::Branch => "branch".into(),
         SpaceSidebarToken::GitStatus => "git_status".into(),
@@ -384,6 +386,7 @@ impl<'de> Deserialize<'de> for SpaceSidebarToken {
             &[
                 ("state_icon", Self::StateIcon),
                 ("state_text", Self::StateText),
+                ("index", Self::Index),
                 ("workspace", Self::Workspace),
                 ("branch", Self::Branch),
                 ("git_status", Self::GitStatus),
@@ -469,10 +472,7 @@ pub struct SpacesSidebarConfig {
 impl Default for SpacesSidebarConfig {
     fn default() -> Self {
         Self {
-            rows: vec![
-                vec![SpaceSidebarToken::StateIcon, SpaceSidebarToken::Workspace],
-                vec![SpaceSidebarToken::Branch, SpaceSidebarToken::GitStatus],
-            ],
+            rows: vec![vec![SpaceSidebarToken::Index, SpaceSidebarToken::Workspace]],
             row_gap: DEFAULT_SIDEBAR_ROW_GAP,
         }
     }
@@ -509,10 +509,7 @@ mod tests {
         assert_eq!(config.agents.row_gap, 0);
         assert_eq!(
             config.spaces.rows,
-            vec![
-                vec![SpaceSidebarToken::StateIcon, SpaceSidebarToken::Workspace],
-                vec![SpaceSidebarToken::Branch, SpaceSidebarToken::GitStatus],
-            ]
+            vec![vec![SpaceSidebarToken::Index, SpaceSidebarToken::Workspace]]
         );
         assert_eq!(config.spaces.row_gap, 0);
     }

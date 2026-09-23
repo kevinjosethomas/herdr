@@ -44,6 +44,8 @@ fn disabled_agents_panel_gives_spaces_the_full_expanded_sidebar() {
     assert!(text.contains(" spaces"));
     assert!(text.contains(" agents"));
     assert!(text.contains("grouped"));
+    assert!(text.contains("1 client-shell"));
+    assert!(!text.contains("main"));
     assert!(!enabled.hits.sidebar_section_divider.is_empty());
     assert!(!enabled.hits.agent_body.is_empty());
     assert!(!enabled.hits.agent_sort_toggle.is_empty());

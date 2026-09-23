@@ -467,7 +467,9 @@ mod tests {
 
     #[test]
     fn headless_deadline_can_suppress_git_refresh_timer() {
-        let mut app = test_app(&crate::config::Config::default());
+        let mut config = crate::config::Config::default();
+        config.ui.sidebar.spaces.rows = vec![vec![crate::config::SpaceSidebarToken::Branch]];
+        let mut app = test_app(&config);
         app.state.workspaces.push(Workspace::test_new("test"));
         let now = Instant::now();
         app.last_git_remote_status_refresh = now - GIT_REMOTE_STATUS_REFRESH_INTERVAL;
@@ -503,7 +505,9 @@ mod tests {
 
     #[test]
     fn git_refresh_due_request_survives_in_flight_refresh() {
-        let mut app = test_app(&crate::config::Config::default());
+        let mut config = crate::config::Config::default();
+        config.ui.sidebar.spaces.rows = vec![vec![crate::config::SpaceSidebarToken::Branch]];
+        let mut app = test_app(&config);
         let now = Instant::now();
         app.git_refresh_in_flight = true;
 

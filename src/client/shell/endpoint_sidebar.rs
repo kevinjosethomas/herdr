@@ -259,6 +259,7 @@ pub(super) fn render_expanded(
         Endpoint(usize),
         Workspace {
             endpoint: usize,
+            position: usize,
             entry: WorkspaceEntry,
         },
     }
@@ -274,8 +275,10 @@ pub(super) fn render_expanded(
             rows.extend(
                 super::sidebar::workspace_entries(snapshot, collapsed_groups)
                     .into_iter()
-                    .map(|entry| Row::Workspace {
+                    .enumerate()
+                    .map(|(position, entry)| Row::Workspace {
                         endpoint: endpoint_index,
+                        position,
                         entry,
                     }),
             );
@@ -294,7 +297,11 @@ pub(super) fn render_expanded(
         .iter()
         .map(|row| match row {
             Row::Endpoint(_) => 1,
-            Row::Workspace { endpoint, entry } => {
+            Row::Workspace {
+                endpoint,
+                position,
+                entry,
+            } => {
                 let endpoint = &state.endpoints[*endpoint];
                 let collapsed_groups = collapsed_groups_for_endpoint(state, &endpoint.endpoint_id)
                     .unwrap_or(&empty_collapsed_groups);
@@ -312,6 +319,7 @@ pub(super) fn render_expanded(
                                     collapsed_groups,
                                 ),
                                 entry.indented,
+                                position + 1,
                                 &config.spaces,
                             )
                             .len()
@@ -326,7 +334,9 @@ pub(super) fn render_expanded(
     let gaps = vec![0; rows.len()];
     if std::mem::take(state.reveal_navigation_workspace) {
         let selected_row = rows.iter().position(|row| match row {
-            Row::Workspace { endpoint, entry } => {
+            Row::Workspace {
+                endpoint, entry, ..
+            } => {
                 let endpoint = &state.endpoints[*endpoint];
                 endpoint
                     .snapshot
@@ -394,7 +404,11 @@ pub(super) fn render_expanded(
                 });
                 y = y.saturating_add(1);
             }
-            Row::Workspace { endpoint, entry } => {
+            Row::Workspace {
+                endpoint,
+                position,
+                entry,
+            } => {
                 let endpoint = &state.endpoints[*endpoint];
                 let Some(snapshot) = endpoint.snapshot.as_deref() else {
                     continue;
@@ -413,6 +427,7 @@ pub(super) fn render_expanded(
                     workspace,
                     status,
                     entry.indented,
+                    position + 1,
                     &config.spaces,
                 );
                 let height = (tokens.len().max(1).min(u16::MAX as usize) as u16).min(body.height);

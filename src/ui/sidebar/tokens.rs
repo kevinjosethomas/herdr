@@ -13,6 +13,7 @@ pub(crate) struct ResolvedToken {
 pub(crate) enum ResolvedTokenKind {
     StateIcon,
     StateText(String),
+    Index(String),
     Machine(String),
     Workspace(String),
     Tab(String),
@@ -28,6 +29,7 @@ impl ResolvedTokenKind {
     fn text_value(&self) -> Option<&str> {
         match self {
             Self::StateText(value)
+            | Self::Index(value)
             | Self::Machine(value)
             | Self::Workspace(value)
             | Self::Tab(value)
@@ -122,6 +124,7 @@ pub(crate) fn agent_rows(
 }
 
 pub(crate) struct SpaceTokenContext<'a> {
+    pub(crate) index: usize,
     pub(crate) workspace: &'a str,
     pub(crate) branch: Option<&'a str>,
     pub(crate) state_text: &'a str,
@@ -146,6 +149,9 @@ pub(crate) fn space_rows(
                         SpaceSidebarToken::StateIcon => Some(ResolvedTokenKind::StateIcon),
                         SpaceSidebarToken::StateText => {
                             Some(ResolvedTokenKind::StateText(context.state_text.to_string()))
+                        }
+                        SpaceSidebarToken::Index => {
+                            Some(ResolvedTokenKind::Index(context.index.to_string()))
                         }
                         SpaceSidebarToken::Workspace => {
                             Some(ResolvedTokenKind::Workspace(context.workspace.to_string()))
@@ -178,9 +184,13 @@ pub(crate) fn space_rows(
 }
 
 pub(crate) fn separator(previous: &ResolvedToken, current: &ResolvedToken) -> &'static str {
-    if matches!(previous.kind, ResolvedTokenKind::StateIcon)
-        || matches!(current.kind, ResolvedTokenKind::GitStatus { .. })
-    {
+    if matches!(
+        previous.kind,
+        ResolvedTokenKind::StateIcon | ResolvedTokenKind::Index(_)
+    ) || matches!(
+        current.kind,
+        ResolvedTokenKind::GitStatus { .. } | ResolvedTokenKind::Index(_)
+    ) {
         " "
     } else {
         " · "
@@ -326,6 +336,7 @@ rows = [[{ token = "$load", rules = [{ lt = 50, dim = true }] }]]
             let spaces = space_rows(
                 &config.spaces,
                 SpaceTokenContext {
+                    index: 1,
                     workspace: "repo",
                     branch: None,
                     state_text: "working",
@@ -375,6 +386,7 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
             let rows = space_rows(
                 &config.spaces,
                 SpaceTokenContext {
+                    index: 1,
                     workspace: "repo",
                     branch: None,
                     state_text: "working",
@@ -538,23 +550,66 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
 
     #[test]
     fn grouped_children_suppress_all_builtin_git_details() {
-        let config = SpacesSidebarConfig::default();
+        let config: SpacesSidebarConfig =
+            toml::from_str(r#"rows = [["state_icon", "workspace"], ["branch", "git_status"]]"#)
+                .unwrap();
+        let tokens = std::collections::HashMap::new();
+        let context = |suppress_git_details: bool| SpaceTokenContext {
+            index: 2,
+            workspace: "feature",
+            branch: Some("worktree/feature"),
+            state_text: "idle",
+            ahead_behind: Some((2, 1)),
+            tokens: &tokens,
+            suppress_git_details,
+        };
 
         assert_eq!(
-            space_rows(
-                &config,
-                SpaceTokenContext {
-                    workspace: "feature",
-                    branch: Some("worktree/feature"),
-                    state_text: "idle",
-                    ahead_behind: Some((2, 1)),
-                    tokens: &std::collections::HashMap::new(),
-                    suppress_git_details: true,
-                },
-            ),
+            space_rows(&config, context(true)),
             vec![vec![
                 ResolvedToken::unstyled(ResolvedTokenKind::StateIcon),
                 ResolvedToken::unstyled(ResolvedTokenKind::Workspace("feature".into())),
+            ]]
+        );
+
+        assert_eq!(
+            space_rows(&config, context(false)),
+            vec![
+                vec![
+                    ResolvedToken::unstyled(ResolvedTokenKind::StateIcon),
+                    ResolvedToken::unstyled(ResolvedTokenKind::Workspace("feature".into())),
+                ],
+                vec![
+                    ResolvedToken::unstyled(ResolvedTokenKind::Branch("worktree/feature".into(),)),
+                    ResolvedToken::unstyled(ResolvedTokenKind::GitStatus {
+                        ahead: 2,
+                        behind: 1
+                    }),
+                ],
+            ]
+        );
+    }
+
+    #[test]
+    fn default_space_rows_are_index_and_workspace_only() {
+        let rows = space_rows(
+            &SpacesSidebarConfig::default(),
+            SpaceTokenContext {
+                index: 3,
+                workspace: "repo",
+                branch: Some("main"),
+                state_text: "working",
+                ahead_behind: Some((2, 1)),
+                tokens: &std::collections::HashMap::new(),
+                suppress_git_details: false,
+            },
+        );
+
+        assert_eq!(
+            rows,
+            vec![vec![
+                ResolvedToken::unstyled(ResolvedTokenKind::Index("3".into())),
+                ResolvedToken::unstyled(ResolvedTokenKind::Workspace("repo".into())),
             ]]
         );
     }
@@ -571,6 +626,7 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
             space_rows(
                 &config,
                 SpaceTokenContext {
+                    index: 1,
                     workspace: "repo",
                     branch: None,
                     state_text: "idle",
