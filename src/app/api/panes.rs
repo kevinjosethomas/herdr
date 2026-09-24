@@ -1914,6 +1914,18 @@ impl App {
         } else {
             self.state.remove_unattached_terminal_ids(terminal_id);
             self.shutdown_detached_terminal_runtimes();
+            if self.state.equal_pane_splits {
+                if let Some((ws_idx, tab_idx)) = layout_update_target {
+                    if let Some(tab) = self
+                        .state
+                        .workspaces
+                        .get_mut(ws_idx)
+                        .and_then(|ws| ws.tabs.get_mut(tab_idx))
+                    {
+                        tab.layout.retile_equal_keeping_orientation();
+                    }
+                }
+            }
             self.schedule_session_save();
             self.emit_event(EventEnvelope {
                 event: EventKind::PaneClosed,

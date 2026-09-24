@@ -328,6 +328,15 @@ impl TileLayout {
         ids
     }
 
+    /// Retile equal in the orientation the tab already has. No-op for a
+    /// single pane. Keeps an even strip even after a pane closes.
+    pub fn retile_equal_keeping_orientation(&mut self) {
+        let Node::Split { direction, .. } = self.root else {
+            return;
+        };
+        self.retile_equal(direction);
+    }
+
     /// Rebuild the tree as one equal strip of the current panes, preserving
     /// their visual order and the focused pane. After a split, this gives
     /// every pane in the tab the same width for a horizontal strip or the
@@ -923,6 +932,49 @@ mod tests {
             "thirds must be equal within one column: {widths:?}"
         );
         assert_eq!(layout.focused(), second, "retile keeps the focused pane");
+    }
+
+    #[test]
+    fn retile_equal_keeping_orientation_evens_after_a_close() {
+        let (mut layout, root) = TileLayout::new();
+        let second = layout.split_focused_with_ratio(Direction::Horizontal, 0.5);
+        let third = TileLayout::split_pane(&mut layout, second, Direction::Horizontal, 0.5)
+            .expect("second pane is in the layout");
+
+        assert!(layout.close_pane(second), "middle pane closes");
+
+        layout.retile_equal_keeping_orientation();
+
+        let widths = layout
+            .pane_ids()
+            .iter()
+            .map(|id| pane_rect(&layout, *id).width)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            layout.pane_ids(),
+            vec![root, third],
+            "visual order survives"
+        );
+        assert!(
+            widths.iter().all(|width| (*width as i32 - 50).abs() <= 1),
+            "halves must be even after a close: {widths:?}"
+        );
+    }
+
+    #[test]
+    fn retile_equal_keeping_orientation_follows_a_vertical_strip() {
+        let (mut layout, root) = TileLayout::new();
+        let second = layout.split_focused_with_ratio(Direction::Vertical, 0.5);
+
+        assert!(layout.close_pane(root), "first pane closes");
+        layout.retile_equal_keeping_orientation();
+
+        let rect = pane_rect(&layout, second);
+        assert_eq!(
+            (rect.width, rect.height),
+            (100, 40),
+            "a lone pane keeps the full area"
+        );
     }
 
     #[test]
