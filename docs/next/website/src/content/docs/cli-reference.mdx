@@ -169,6 +169,8 @@ herdr workspace create --cwd ~/project --label api --no-focus
 
 A workspace is a top-level project or work context. Creating one also creates its first tab and root pane. The JSON response exposes their IDs as `.result.workspace.workspace_id`, `.result.tab.tab_id`, and `.result.root_pane.pane_id`.
 
+`workspace rename` with an empty label clears the manual name, so the space follows its agent session label (or the automatic directory label) again.
+
 ## Worktrees
 
 ```bash

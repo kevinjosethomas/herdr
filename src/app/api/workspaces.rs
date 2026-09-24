@@ -112,14 +112,21 @@ impl App {
         let Some(ws) = self.state.workspaces.get_mut(index) else {
             return workspace_not_found(id, &params.workspace_id);
         };
-        ws.set_custom_name(params.label.clone());
+        // An empty label clears the manual name so the space follows its
+        // agent session label (or the automatic directory label) again.
+        let label = params.label.trim().to_string();
+        if label.is_empty() {
+            ws.custom_name = None;
+        } else {
+            ws.set_custom_name(label.clone());
+        }
         crate::logging::workspace_renamed(&ws.id);
         self.schedule_session_save();
         self.emit_event(EventEnvelope {
             event: EventKind::WorkspaceRenamed,
             data: EventData::WorkspaceRenamed {
                 workspace_id: self.public_workspace_id(index),
-                label: params.label,
+                label,
             },
         });
 
@@ -752,6 +759,39 @@ mod tests {
                         .is_some_and(|worktree| worktree.is_linked_worktree)
             )
         }));
+    }
+
+    #[test]
+    fn workspace_rename_empty_label_clears_the_manual_name() {
+        let event_hub = crate::api::EventHub::default();
+        let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(
+            &Config::default(),
+            crate::app::AppPolicy::TEST,
+            None,
+            api_rx,
+            event_hub.clone(),
+        );
+        app.state.workspaces = vec![Workspace::test_new("manual name")];
+        let workspace_id = app.public_workspace_id(0);
+
+        let response = app.handle_workspace_rename(
+            "req".into(),
+            WorkspaceRenameParams {
+                workspace_id: workspace_id.clone(),
+                label: "  ".into(),
+            },
+        );
+        let response: SuccessResponse = serde_json::from_str(&response).unwrap();
+        let ResponseResult::WorkspaceInfo { workspace } = response.result else {
+            panic!("rename should return workspace info");
+        };
+
+        assert!(workspace.label != "manual name");
+        assert_eq!(
+            app.state.workspaces[0].custom_name, None,
+            "empty rename must clear the manual name"
+        );
     }
 
     #[test]
