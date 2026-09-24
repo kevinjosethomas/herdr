@@ -946,6 +946,10 @@ pub struct UiConfig {
     pub show_agent_labels_on_pane_borders: bool,
     /// Hide the tab row when the workspace has one tab. Default: false.
     pub hide_tab_bar_when_single_tab: bool,
+    /// Rebuild a tab as one equal strip when a pane splits without an explicit
+    /// ratio, so every pane in the tab shares the same width (or height).
+    /// Default: true.
+    pub equal_pane_splits: bool,
     /// Desktop tab row placement. Default: top.
     pub tab_bar_position: TabBarPositionConfig,
     /// Ordered entries shown at the right edge of the desktop tab row. Empty by default.
@@ -1182,6 +1186,7 @@ impl Default for UiConfig {
             pane_gaps: true,
             show_agent_labels_on_pane_borders: false,
             hide_tab_bar_when_single_tab: false,
+            equal_pane_splits: true,
             tab_bar_position: TabBarPositionConfig::Top,
             tab_bar_right: Vec::new(),
             tab_bar_right_separator: " ".into(),
@@ -1484,6 +1489,7 @@ status_indicators = "symbols"
         assert!(default_config.ui.pane_gaps);
         assert!(!default_config.ui.show_agent_labels_on_pane_borders);
         assert!(!default_config.ui.hide_tab_bar_when_single_tab);
+        assert!(default_config.ui.equal_pane_splits);
         assert_eq!(
             default_config.ui.tab_bar_position,
             TabBarPositionConfig::Top
@@ -1499,6 +1505,7 @@ pane_scrollbars = false
 pane_gaps = true
 show_agent_labels_on_pane_borders = true
 hide_tab_bar_when_single_tab = true
+equal_pane_splits = false
 tab_bar_position = "bottom"
 tab_bar_right = [
   { type = "zoom" },
@@ -1516,6 +1523,7 @@ tab_bar_right_separator = " · "
         assert!(config.ui.pane_gaps);
         assert!(config.ui.show_agent_labels_on_pane_borders);
         assert!(config.ui.hide_tab_bar_when_single_tab);
+        assert!(!config.ui.equal_pane_splits);
         assert_eq!(config.ui.tab_bar_position, TabBarPositionConfig::Bottom);
         assert_eq!(config.ui.tab_bar_right.len(), 5);
         assert!(matches!(

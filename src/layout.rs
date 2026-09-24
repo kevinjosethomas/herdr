@@ -328,6 +328,21 @@ impl TileLayout {
         ids
     }
 
+    /// Rebuild the tree as one equal strip of the current panes, preserving
+    /// their visual order and the focused pane. After a split, this gives
+    /// every pane in the tab the same width for a horizontal strip or the
+    /// same height for a vertical one.
+    pub fn retile_equal(&mut self, direction: Direction) {
+        let Some((first, rest)) = self
+            .pane_ids()
+            .split_first()
+            .map(|(first, rest)| (*first, rest.to_vec()))
+        else {
+            return;
+        };
+        self.root = equal_strip(first, &rest, direction);
+    }
+
     /// Access the tree root for serialization.
     pub fn root(&self) -> &Node {
         &self.root
@@ -616,6 +631,21 @@ fn split_at(
     }
 }
 
+/// One equal strip in order: the leading child of each split takes `1/len`
+/// of its subtree area, so every pane ends up with an equal share of the
+/// strip after integer rounding.
+fn equal_strip(first: PaneId, rest: &[PaneId], direction: Direction) -> Node {
+    let Some((second, tail)) = rest.split_first() else {
+        return Node::Pane(first);
+    };
+    Node::Split {
+        direction,
+        ratio: valid_split_ratio(1.0 / (rest.len() + 1) as f32),
+        first: Box::new(Node::Pane(first)),
+        second: Box::new(equal_strip(*second, tail, direction)),
+    }
+}
+
 fn valid_split_ratio(ratio: f32) -> f32 {
     if ratio.is_finite() {
         ratio.clamp(0.1, 0.9)
@@ -825,6 +855,74 @@ mod tests {
         assert_eq!(splits, vec![(Direction::Horizontal, 0.25)]);
         assert_eq!(pane_rect(&layout, root), Rect::new(0, 0, 25, 40));
         assert_eq!(pane_rect(&layout, moved), Rect::new(25, 0, 75, 40));
+    }
+
+    #[test]
+    fn retile_equal_flattens_a_nested_tree_into_equal_columns() {
+        let mut layout = sample_layout();
+        let order = layout.pane_ids();
+
+        layout.retile_equal(Direction::Horizontal);
+
+        let widths = order
+            .iter()
+            .map(|id| pane_rect(&layout, *id).width)
+            .collect::<Vec<_>>();
+        assert_eq!(layout.pane_ids(), order, "visual order is preserved");
+        assert_eq!(layout.focused(), pane(2), "focus is preserved");
+        assert!(
+            widths.iter().all(|width| (*width as i32 - 25).abs() <= 1),
+            "widths must be equal within one column: {widths:?}"
+        );
+        assert!(
+            order.iter().all(|id| pane_rect(&layout, *id).height == 40),
+            "a horizontal strip keeps every pane full height"
+        );
+    }
+
+    #[test]
+    fn retile_equal_builds_equal_rows_for_a_vertical_strip() {
+        let mut layout = sample_layout();
+        let order = layout.pane_ids();
+
+        layout.retile_equal(Direction::Vertical);
+
+        let heights = order
+            .iter()
+            .map(|id| pane_rect(&layout, *id).height)
+            .collect::<Vec<_>>();
+        assert_eq!(layout.pane_ids(), order, "visual order is preserved");
+        assert!(
+            heights
+                .iter()
+                .all(|height| (*height as i32 - 10).abs() <= 1),
+            "heights must be equal within one row: {heights:?}"
+        );
+        assert!(
+            order.iter().all(|id| pane_rect(&layout, *id).width == 100),
+            "a vertical strip keeps every pane full width"
+        );
+    }
+
+    #[test]
+    fn retile_equal_distributes_odd_counts_within_one_cell() {
+        let (mut layout, _) = TileLayout::new();
+        let second = layout.split_focused_with_ratio(Direction::Horizontal, 0.5);
+        let _third = TileLayout::split_pane(&mut layout, second, Direction::Horizontal, 0.5)
+            .expect("second pane is in the layout");
+
+        layout.retile_equal(Direction::Horizontal);
+
+        let widths = layout
+            .pane_ids()
+            .iter()
+            .map(|id| pane_rect(&layout, *id).width)
+            .collect::<Vec<_>>();
+        assert!(
+            widths.iter().all(|width| (*width as i32 - 33).abs() <= 1),
+            "thirds must be equal within one column: {widths:?}"
+        );
+        assert_eq!(layout.focused(), second, "retile keeps the focused pane");
     }
 
     #[test]

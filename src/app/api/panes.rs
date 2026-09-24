@@ -104,6 +104,16 @@ impl App {
             Some(Err(err)) => return encode_error(id, "pane_split_failed", err.to_string()),
             None => return encode_error(id, "pane_not_found", "pane not found"),
         };
+        if params.ratio.is_none() && self.state.equal_pane_splits {
+            if let Some(tab) = self
+                .state
+                .workspaces
+                .get_mut(ws_idx)
+                .and_then(|ws| ws.tabs.get_mut(target_tab_idx))
+            {
+                tab.layout.retile_equal(direction);
+            }
+        }
         if let Some(pane) = self.state.workspaces[ws_idx].pane_state_mut(new_pane.pane_id) {
             pane.right_click_passthrough = matches!(
                 params.right_click,

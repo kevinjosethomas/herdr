@@ -994,6 +994,12 @@
           "description": "Hide the tab row when the workspace has one tab."
         },
         {
+          "key": "ui.equal_pane_splits",
+          "type": "boolean",
+          "default": "true",
+          "description": "Rebuild a tab as one equal strip when a pane splits without an explicit ratio, so every pane in the tab shares the same width (or height). Explicit pane.split ratios are unaffected; set false to restore nested half splits."
+        },
+        {
           "key": "ui.tab_bar_position",
           "type": "enum",
           "default": "\"top\"",
